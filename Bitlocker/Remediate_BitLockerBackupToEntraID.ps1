@@ -1,21 +1,23 @@
 <#
 .SYNOPSIS
-	The detection script is used to check if the BitLocker recovery key(s) is stored in Azure AD.
+	The remediation script is used to back up the BitLocker recovery key(s) to Entra ID.
 
 .DESCRIPTION
-	The detection script will check if the device is protected by BitLocker and if the BitLocker recovery key(s) is stored in Azure AD.
+	The remediation script will check if the device is protected by BitLocker and attempt to back up the BitLocker recovery key(s) to Entra ID.
+
+	Looking for a detailed implementation guidance? - See https://www.osdsune.com/home/blog/microsoft-intune/how-to-migrate-bitlocker-key-s-from-all-fixed-drives-to-microsoft-entra-id.
 
 	-------------------------------------------------------
-	Proactive Remediation Information
+	Remediations Information
 	-------------------------------------------------------
-	Required settings for the script package in Endpoint analytics | Proactive remediations.
+	Required settings for the script package in Devices | Scripts and remediations.
 
 		Run this script using the logged-on credentials: No
 		Enforce script signature check: No
 		Run script in 64-bit PowerShell: Yes
 
 	-------------------------------------------------------
-	Proactive Remediation Scenarios and detection output
+	Remediations Scenarios and detection output
 	-------------------------------------------------------
 	Scenario: The script is not running in system context.
 	Output: "PREREQ: The script is not running in system context. - Please run the script as system."
@@ -26,14 +28,14 @@
 	Scenario: The drive (For example, 'C:') is not protected by BitLocker.
 	Output: "NOT PROTECTED: BitLocker protection status on drive 'C:' is = Off. - Please ensure that the BitLocker protection is turned on and not temporarily suspended."
 
-	Scenario: BitLocker recovery key(s) is not stored in Azure AD.
-	Output: "PROTECTED - RUN REMEDIATION: BitLocker recovery key(s) is not stored in Azure AD. - Run remediation script..."
+	Scenario: BitLocker recovery key(s) is not stored in Entra ID.
+	Output: "PROTECTED - RUN REMEDIATION: BitLocker recovery key(s) is not stored in Entra ID. - Run remediation script..."
 
-	Scenario: The proactive remediation script failed.
+	Scenario: The remediation script failed.
 	Output: "ERROR: Whoopsie... Something failed at line 36: Error message"
 
 	-------------------------------------------------------
-	Proactive Remediation Functions
+	Remediations Functions
 	-------------------------------------------------------
 	Function (Write-Log)
 
@@ -61,11 +63,11 @@
 		Be aware that all parameters in this function are mandatory!
 
 		Valid example(s):
-		Check-EventLog -EventProviderName "Microsoft-Windows-BitLocker-API" -EventMessage "volume C: was backed up successfully to your Azure AD." -EventTime "01/01/2022 00:00:00" -EventID "845"
+		Check-EventLog -EventProviderName "Microsoft-Windows-BitLocker-API" -EventMessage "volume C: was backed up successfully to your Entra ID." -EventTime "01/01/2022 00:00:00" -EventID "845"
 
 	Function (Convert-RegistryKey)
 
-		This function is called by the Check-RegistryKey function to convert the registry key hive to the full path.
+		This function is called by the Check-RegistryKey and Set-RegistryKey functions to convert the registry key hive to the full path.
 
 	Function (Check-RegistryKey)
 
@@ -101,6 +103,47 @@
 		Check-RegistryKey -Key "HKCR:\MIME\Database\Content Type\application/hta" -Name "Extension" -Value ""
 		Check-RegistryKey -Key "HKCR:\MIME\Database\Content Type\application/hta" -Name "" -Value ""
 
+	Function (Set-RegistryKey)
+
+		You can use this function with the default pre-defined variables or specify your values when calling the function.
+		This function can be used to create/set a registry key path, name, and value.
+		Be aware that the registry key, name, and type parameters in this function are mandatory.
+
+		-------------------------------------------------------
+		Registry Hive               Abbreviation
+		-------------------------------------------------------
+		HKEY_LOCAL_MACHINE          HKLM
+		HKEY_CURRENT_USER           HKCU
+		HKEY_USERS                  HKU
+		HKEY_CURRENT_CONFIG         HKCC
+		HKEY_CLASSES_ROOT           HKCR
+		--------------------------------------------------------------------------------------------------------------
+		Registry Types              Description
+		--------------------------------------------------------------------------------------------------------------
+		String                      Specifies a null-terminated string. Equivalent to REG_SZ.
+		ExpandString                Specifies a null-terminated string that contains unexpanded references to environment variables that are expanded when the value is retrieved. Equivalent to REG_EXPAND_SZ.
+		Binary                      Specifies binary data in any form. Equivalent to REG_BINARY.
+		DWord                       Specifies a 32-bit binary number. Equivalent to REG_DWORD.
+		MultiString                 Specifies an array of null-terminated strings terminated by two null characters. Equivalent to REG_MULTI_SZ.
+		Qword                       Specifies a 64-bit binary number. Equivalent to REG_QWORD.
+		Unknown                     Indicates an unsupported registry data type, such as REG_RESOURCE_LIST.
+		--------------------------------------------------------------------------------------------------------------
+
+		Valid example(s) (HKEY_LOCAL_MACHINE):
+		Set-RegistryKey -Key "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "(Default)" -Value "" -Type "STRING"
+		Set-RegistryKey -Key "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "SystemRoot" -Value "C:\WINDOWS" -Type "STRING"
+		Set-RegistryKey -Key "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "SystemRoot" -Value "" -Type "STRING"
+
+		Valid example(s) (HKEY_CURRENT_USER):
+		Set-RegistryKey -Key "HKCU:\Control Panel\Desktop" -Name "(Default)" -Value "" -Type "STRING"
+		Set-RegistryKey -Key "HKCU:\Control Panel\Desktop" -Name "WallPaper" -Value "C:\Windows\web\wallpaper\Windows\img19.jpg" -Type "STRING"
+		Set-RegistryKey -Key "HKCU:\Control Panel\Desktop" -Name "WallPaper" -Value "" -Type "STRING"
+
+		Valid example(s) (HKEY_CLASSES_ROOT):
+		Set-RegistryKey -Key "HKCR:\MIME\Database\Content Type\application/hta" -Name "(Default)" -Value "" -Type "STRING"
+		Set-RegistryKey -Key "HKCR:\MIME\Database\Content Type\application/hta" -Name "Extension" -Value ".hta" -Type "STRING"
+		Set-RegistryKey -Key "HKCR:\MIME\Database\Content Type\application/hta" -Name "Extension" -Value "" -Type "STRING"
+
 	Function (Check-BitLockerProtectionStatus)
 
 		This function is called to check if the drive (For example, 'C:') is protected by BitLocker.
@@ -108,6 +151,10 @@
 	Function (Check-BitLockerVolumeStatus)
 
 		This function is called to check if the drive (For example, 'C:') is fully encrypted by BitLocker.
+
+	Function (Invoke-BitLockerBackupToEntraID)
+
+		This function will attempt to back up the BitLocker recovery key(s) to Entra ID.
 
 	Function (Exit-Script)
 
@@ -123,11 +170,13 @@
 
 .NOTES
 	Created on:   26-11-2021
-	Modified:     17-11-2023
+	Modified:     27-05-2025
 	Author:       Sune Thomsen
-	Version:      3.1
-	Mail:         stn@mindcore.dk
-	Twitter:      https://twitter.com/SuneThomsenDK
+	Version:      3.2
+	Mail:         sune.thomsen@outlook.com
+	LinkedIn:     https://www.linkedin.com/in/sunethomsendk/
+	Bluesky:      https://bsky.app/profile/sunethomsendk.bsky.social
+	X (Twitter):  https://twitter.com/SuneThomsenDK
 
 	Changelog:
 	----------
@@ -141,6 +190,7 @@
 	04-05-2022 - v2.1 - Minor changes to the Write-Log function.
 	09-06-2023 - v3.0 - The script has been rewritten to support multiple fixed drives. -> Set the "$Global:CheckAllDrives" to "$true" under "Set system variable(s)" if you want the script to check all available fixed drives.
 	06-10-2023 - v3.1 - Minor changes to the script output
+	27-05-2025 - v3.2 - Replaced "Azure AD" with "Entra ID" throughout the script and added new detection logic for event log messages.
 
 .LINK
 	https://github.com/SuneThomsenDK
@@ -152,12 +202,11 @@
 	## Set system variable(s)
 	[String]$Global:ScriptName = $MyInvocation.MyCommand.Name
 	[String]$Global:UserName = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+	[String]$Global:OSVersion = "{0}.{1}.{2}.{3}" -f ('CurrentMajorVersionNumber','CurrentMinorVersionNumber','CurrentBuild','UBR' | ForEach-Object {Get-ItemPropertyValue -Path 'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows NT\CurrentVersion' -Name $_})
 	[Bool]$Global:IsPowerShell64bitVersion = [Environment]::Is64BitProcess
 	[Bool]$Global:IsSystemContext = [System.Security.Principal.WindowsIdentity]::GetCurrent().IsSystem
-	[Bool]$Global:SkipPrereq = $true ## <---- Change this to "$true" if you want the script to skip the prerequisite check. (Default is $false)
+	[Bool]$Global:SkipPrereq = $false ## <---- Change this to "$true" if you want the script to skip the prerequisite check. (Default is $false)
 	[Bool]$Global:CheckAllDrives = $false ## <---- Change this to "$true" if you want the script to check all available fixed drives. (Default is $false)
-	[Array]$OutputMsgArray = $Null
-	[Array]$OutputMsgArray = @()
 
 		If (($Global:CheckAllDrives)) {
 			[Array]$Global:GetDrives = (get-wmiobject -class win32_logicaldisk | where {$_.DriveType -eq "3"}).DeviceID
@@ -169,18 +218,28 @@
 	## Set log variable(s)
 	[String]$Global:LogLocation = "$env:ProgramData\Microsoft\IntuneManagementExtension\Logs"
 	[String]$Global:LogName = "IntuneProactiveRemediation"
-	[String]$Global:LogComponent = "DetectionScript"
-	[String]$Global:LogSubject = "BitLocker Backup to AAD"
+	[String]$Global:LogComponent = "RemediationScript"
+	[String]$Global:LogSubject = "BitLocker Backup to Entra ID"
 	[Int]$Global:LogMaxSize = 250KB
 
 	## Set registry variable(s)
 	[String]$Global:DefaultRegistryKey = "HKLM:\SOFTWARE\CompanyName\BitLocker" ## <---- Change "CompanyName" to your own company name.
-	[String]$Global:DefaultRegistryName = "Drive_{0}_BitLockerBackupToAAD"
+	[String]$Global:DefaultRegistryName = "Drive_{0}_BitLockerBackupToEntraID"
+	[String]$Global:DefaultRegistryType = "STRING"
 	[String]$Global:DefaultRegistryValue = "True"
 
 	## Set event log variable(s)
 	[String]$Global:DefaultEventProviderName = "Microsoft-Windows-BitLocker-API"
-	[String]$Global:DefaultEventMessage = "volume {0} was backed up successfully to your Azure AD."
+
+		If ($Global:OSVersion -ge "10.0.26100.4061") {
+			## Windows 11 version 24H2 (10.0.26100.4061) or later.
+			[String]$Global:DefaultEventMessage = "volume {0} was backed up successfully to your Entra ID."
+		}
+		Else {
+			## Windows 11 version 24H2 (10.0.26100.3983) or earlier.
+			[String]$Global:DefaultEventMessage = "volume {0} was backed up successfully to your Azure AD."
+		}
+
 	[DateTime]$Global:DefaultEventTime = "01/01/2022 00:00:00" ## <---- MM/dd/yyyy HH:mm:ss
 	[Int]$Global:DefaultEventID = "845"
 
@@ -191,10 +250,10 @@
 	## Do NOT make changes below this line unless you know what you are doing! ##
 	## ----------------------------------------------------------------------- ##
 
-## Detection
-$Detection = {
-	## Invoke detection
-	$Msg = (" ----------------------------------------------------- Invoke Detection ({0}) ----------------------------------------------------- " -f $Global:UserName)
+## Remediation
+$Remediation = {
+	## Invoke remediation
+	$Msg = (" ----------------------------------------------------- Invoke Remediation ({0}) ----------------------------------------------------- " -f $Global:UserName)
 	Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
 
 	Try {
@@ -206,13 +265,11 @@ $Detection = {
 			If (!($Global:IsSystemContext)) {
 				$Msg = "The script is not running under the system account. - Please run the script as system."
 				Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -Severity 3
-				$Global:OutputMsgArray += ("PREREQ: {0}" -f $Msg)
 				$Global:ExitCode = 1
 			}
 			ElseIf (!($Global:IsPowerShell64bitVersion)) {
 				$Msg = "The script is not running in 64-bit PowerShell. - Please run the script in 64-bit PowerShell."
 				Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -Severity 3
-				$Global:OutputMsgArray += ("PREREQ: {0}" -f $Msg)
 				$Global:ExitCode = 1
 			}
 			Else {
@@ -221,8 +278,7 @@ $Detection = {
 			}
 
 			If (!($Global:ExitCode -eq 0)) {
-				$OutputMsg = '[{0}]' -f ($Global:OutputMsgArray -join '] + [')
-				Exit-Script -ExitCode $Global:ExitCode -ExitMessage $OutputMsg
+				Exit-Script -ExitCode $Global:ExitCode
 			}
 		}
 		Else {
@@ -235,30 +291,44 @@ $Detection = {
 			If (((Check-BitLockerVolumeStatus) -match 'FullyEncrypted')) {
 				$Msg = ("Drive '{0}' is fully encrypted by BitLocker. - The script will continue..." -f $Global:Drive)
 				Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
-			
+
 				If (((Check-BitLockerProtectionStatus) -eq 'On')) {
 					$Msg = ("Drive '{0}' is protected by BitLocker. - The script will continue..." -f $Global:Drive)
 					Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
 
-					## The script checks the event log or the registry to see if the BitLocker recovery key(s) has been stored in Azure AD.
-					$Msg = "The script checks the event log or registry to see if the BitLocker recovery key(s) has been stored in Azure AD."
+					## The script checks the event log and registry to confirm that the BitLocker recovery key(s) has not been stored in Entra ID.
+					$Msg = "The script checks the event log and registry to confirm that the BitLocker recovery key(s) has not been stored in Entra ID."
 					Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
 
-					If (((Check-EventLog)) -or ((Check-RegistryKey))) {
-						$Msg = ("BitLocker recovery key(s) from drive '{0}' is stored in Azure AD, do nothing." -f $Global:Drive)
+					If ((!(Check-EventLog)) -and (!(Check-RegistryKey))) {
+						## The script will attempt to back up the BitLocker recovery key(s) to Entra ID.
+						$Msg = "The script will attempt to back up the BitLocker recovery key(s) to Entra ID."
 						Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
+
+						Invoke-BitLockerBackupToEntraID
+
+						## Okay, let's check if the BitLocker recovery key(s) has been successfully backed up to Entra ID.
+						$Msg = "Okay, let's check if the BitLocker recovery key(s) has been successfully backed up to Entra ID."
+						Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
+
+						If ((Check-EventLog)) {
+							$Msg = ("BitLocker recovery key(s) from drive '{0}' was successfully backed up to Entra ID." -f $Global:Drive)
+							Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
+						}
+						Else {
+							$Msg = ("The remediation script failed to back up the BitLocker recovery key(s) from drive '{0}' to Entra ID." -f $Global:Drive)
+							Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -Severity 3
+							$Global:ExitCode = 1
+						}
 					}
 					Else {
-						$Msg = ("BitLocker recovery key(s) from drive '{0}' is not stored in Azure AD. - Run remediation script..." -f $Global:Drive)
-						Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -Severity 2
-						$Global:OutputMsgArray += ("PROTECTED - RUN REMEDIATION: {0}" -f $Msg)
-						$Global:ExitCode = 1
+						$Msg = ("BitLocker recovery key(s) from drive '{0}' is stored in Entra ID, do nothing." -f $Global:Drive)
+						Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg)
 					}
 				}
 				Else {
 					$Msg = ("BitLocker protection status of drive '{0}' is = {1}. - Please ensure that the BitLocker protection is turned on and not temporarily suspended." -f $Global:Drive, $Global:GetBitLockerProtectionStatus)
 					Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -Severity 3
-					$Global:OutputMsgArray += ("NOT PROTECTED: {0}" -f $Msg)
 					$Global:ExitCode = 1
 				}
 			}
@@ -271,7 +341,6 @@ $Detection = {
 	Catch {
 		$ErrMsg = ("Whoopsie... Something failed at line {0}: {1}" -f $_.InvocationInfo.ScriptLineNumber, $_.Exception.Message)
 		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $ErrMsg) -Severity 3
-		$Global:OutputMsgArray += ("ERROR: {0}" -f $ErrMsg)
 		$Global:ExitCode = 1
 	}
 }
@@ -380,7 +449,7 @@ Function Check-EventLog {
 	Param (
 		[Parameter(Mandatory=$false, HelpMessage = "Specify an event provider name (Mandatory)")]
 		[String]$EventProviderName = $Global:DefaultEventProviderName,
-
+		
 		[Parameter(Mandatory=$false, HelpMessage = "Specify an event message (Mandatory)")]
 		[String]$EventMessage = ("$Global:DefaultEventMessage" -f $Global:Drive),
 
@@ -586,6 +655,108 @@ Function Check-RegistryKey {
 	}
 }
 
+Function Set-RegistryKey {
+	Param (
+		[Parameter(Mandatory=$false, HelpMessage = "Specify a registry key (Mandatory)")]
+		[String]$Key = $Global:DefaultRegistryKey,
+
+		[Parameter(Mandatory=$false, HelpMessage = "Specify a registry name (Mandatory)")]
+		[String]$Name = ("$Global:DefaultRegistryName" -f $Global:Drive -replace '[:]',''),
+
+		[Parameter(Mandatory=$false, HelpMessage = "Sepcify a registry type STRING, DWORD, etc. (Mandatory)")]
+		[String]$Type = $Global:DefaultRegistryType,
+
+		[Parameter(Mandatory=$false, HelpMessage = "Sepcify a registry value (Optional)")]
+		[String]$Value = $Global:DefaultRegistryValue
+	)
+
+	$RegistryTypeArray = @(
+		'STRING'
+		'EXPANDSTRING'
+		'BINARY'
+		'DWORD'
+		'MULTISTRING'
+		'QWORD'
+		'UNKNOWN'
+	)
+
+	Try {
+		## Writing to the registry...
+		$Msg = "Writing to the registry..."
+		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name)
+
+		## The script checks that the specified registry key parameter is not null or empty.
+		If (!([String]::IsNullOrWhitespace($Key))) {
+			## The script converts the specified registry key to a format that is compatible with built-in PowerShell cmdlets
+			[String]$Key = Convert-RegistryKey -Key $Key
+
+			## The script checks that the converted registry key is valid.
+			If (!($Key -match '^Registry::HKEY_')) {
+				$Msg = ("The registry key '{0}' is not valid. - Please specify a valid registry key." -f ($Key -split ':')[-1])
+				Throw $Msg
+			}
+		}
+		Else {
+			$Msg = "The registry key parameter is null or empty. - Please specify a valid registry key."
+			Throw $Msg
+		}
+		## The script checks that the specified registry name parameter is not null or empty.
+		If (([String]::IsNullOrWhitespace($Name))) {
+			$Msg = "The registry name parameter is null or empty. - Please specify a valid registry name."
+			Throw $Msg
+		}
+		## The script checks that the specified registry type parameter is not null or empty.
+		If (!([String]::IsNullOrWhitespace($Type))) {
+			## The script checks that the specified registry type is valid.
+			If (!($Type -in $RegistryTypeArray)) {
+				$Msg = ("The registry type '{0}' is not valid. - Please specify a valid registry type." -f $Type)
+				Throw $Msg
+			}
+		}
+		Else {
+			$Msg = "The registry type parameter is null or empty. - Please specify a valid registry type."
+			Throw $Msg
+		}
+
+		## The script will create the specified registry key, name and value if it does not exists.
+		$Msg = ("Setting the specified registry key '{0}' with the name '{1}' and with the value '{2}'" -f ($Key -split ':')[-1], $Name, $Value)
+		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name)
+
+		## The script will create the specified registry key if it does not exists.
+		If (!(Test-Path -LiteralPath $Key)) {
+			[Bool]$KeyPathMatchForwardSlash = ($Key -match '/')
+			If (($KeyPathMatchForwardSlash)) {
+				$SetRegistryKey = & "$env:windir\System32\reg.exe" add "$(($Key).Substring($Key.IndexOf('::') + 2))"
+			}
+			Else {
+				New-Item -Path $Key -ItemType 'Registry' -Force -ErrorAction 'Stop' | Out-Null
+			}
+		}
+
+		## The script will create the specified registry name if it does not exists.
+		$GetRegistryName = Get-Item -LiteralPath $Key -ErrorAction 'Stop' | Select-Object -ExpandProperty 'Property' -ErrorAction 'Stop'
+
+		If (!($GetRegistryName -contains $Name)) {
+			New-ItemProperty -LiteralPath $Key -Name $Name -Value $Value -PropertyType $Type -ErrorAction 'Stop' | Out-Null
+		}
+		Else {
+			## The script will set the specified registry value
+			If (($Name -eq '(Default)')) {
+				## Setting the '(Default)' value with the following workaround because Set-ItemProperty contains a bug.
+				$(Get-Item -LiteralPath $Key -ErrorAction 'Stop').OpenSubKey('','ReadWriteSubTree').SetValue($Null, $Value)
+			}
+			Else {
+				Set-ItemProperty -LiteralPath $Key -Name $Name -Type $Type -Value $Value -ErrorAction 'Stop' | Out-Null
+			}
+		}
+	}
+	Catch {
+		$ErrMsg = ("The function called '{0}' failed at line {1}: {2}" -f $MyInvocation.MyCommand.Name, $_.InvocationInfo.ScriptLineNumber, $_.Exception.Message)
+		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $ErrMsg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name) -Severity 3
+		Write-Error $ErrMsg -ErrorAction 'Stop'
+	}
+}
+
 Function Check-BitLockerProtectionStatus {
 	Try {
 		$Msg = ("The script detects if the drive '{0}' is protected by BitLocker." -f $Global:Drive)
@@ -626,6 +797,56 @@ Function Check-BitLockerVolumeStatus {
 	}
 }
 
+Function Invoke-BitLockerBackupToEntraID {
+	Try {
+		## Set wait variable for WinEvent check.
+		[Int]$WaitForWinEvent = 0
+
+		## The script will gather the key protector data from the drive (For example, 'C:').
+		$KeyProtector = (Get-BitLockerVolume -MountPoint $Global:Drive).KeyProtector | Where-Object {$_.keyProtectorType -eq 'RecoveryPassword'}
+
+		## The script will back up each key protector ID to Entra ID.
+		Foreach ($Member in $KeyProtector) {
+			BackupToAAD-BitLockerKeyProtector -MountPoint $Global:Drive -KeyProtectorId $Member.KeyProtectorId | Out-Null
+			$Msg = ("The Key Protector ID '{0}' will be backed up to Entra ID." -f $Member.KeyProtectorID)
+			Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name)
+		}
+
+		## Wait for Event log to be created - It will time-out after 30 minutes!
+		$Msg = "Wait for the BitLocker recovery key(s) to be transferred to Entra ID..."
+		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name)
+
+		While ($WaitForWinEvent -lt 180) {
+			## The script will wait 5 seconds before checking the event log.
+			Start-Sleep -Seconds 5
+
+			## The script checks the event log to see if the BitLocker recovery key(s) has been stored in Entra ID.
+			If ((Check-EventLog)) {
+				If (!(Check-RegistryKey)) {
+					## The script will create the specified registry key, name, type and value.
+					Set-RegistryKey
+				}
+				$Msg = "BitLocker recovery key(s) was transferred to Entra ID. - The script will continue..."
+				Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name)
+
+				$WaitForWinEvent = 180
+				Start-Sleep -Seconds 5
+			}
+			Else {
+				$Msg = "Whoopsie... Transferring the BitLocker recovery key(s) to Entra ID is taking a bit longer than expected! - The script will try again in 10 seconds."
+				Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name) -Severity 2
+				Start-Sleep -Seconds 5
+			}
+			$WaitForWinEvent++
+		}
+	}
+	Catch {
+		$ErrMsg = ("The function called '{0}' failed at line {1}: {2}" -f $MyInvocation.MyCommand.Name, $_.InvocationInfo.ScriptLineNumber, $_.Exception.Message)
+		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $ErrMsg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name) -Severity 3
+		Write-Error $ErrMsg -ErrorAction 'Stop'
+	}
+}
+
 Function Exit-Script {
 	Param (
 		[Parameter(Mandatory=$true, HelpMessage="Provide an exit code (Mandatory)")]
@@ -634,32 +855,24 @@ Function Exit-Script {
 
 		[Parameter(Mandatory=$false, HelpMessage = "Specify an exit message (Optional)")]
 		[ValidateNotNullOrEmpty()]
-		[String]$ExitMessage = ("[Exit code '{0}' - Remediation is required. Please check the log for more details.]" -f $ExitCode)
+		[String]$ExitMessage
 	)
 
 	## Exit script
 	If (($ExitCode -eq 0)) {
-		$Msg = ("Exit code '{0}' - Remediation is not required." -f $ExitCode)
+		$Msg = ("Exit code '{0}' - Remediation succeded." -f $ExitCode)
 		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name)
-		Write-Output ("[{0} Please check the log for more details.]" -f $Msg)
 		Exit $ExitCode
 	}
 	Else {
-		$Msg = ("Exit code '{0}' - Remediation is required." -f $ExitCode)
-		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name) -Severity 2
-		Write-Output ("{0}" -f $ExitMessage)
+		$Msg = ("Exit code '{0}' - Remediation failed." -f $ExitCode)
+		Write-Log -Message ("[{0}]: {1}" -f $Global:LogSubject, $Msg) -ComponentName ("{0}-({1})" -f $Global:LogComponent, $MyInvocation.MyCommand.Name) -Severity 3
 		Exit $ExitCode
 	}
 }
 
-## Invoke detection
-& $Detection
+## Invoke remediation
+& $Remediation
 
 ## Exit
-If (($Global:OutputMsgArray)) {
-	$OutputMsg = '[{0}]' -f ($Global:OutputMsgArray -join '] + [')
-	Exit-Script -ExitCode $Global:ExitCode -ExitMessage $OutputMsg 
-}
-Else {
-	Exit-Script -ExitCode $Global:ExitCode
-}
+Exit-Script -ExitCode $Global:ExitCode
