@@ -1,3 +1,254 @@
+<#
+.SYNOPSIS
+
+Creates and maintains Microsoft Intune Assignment Filters based on
+hardware models discovered in the tenant.
+
+.DESCRIPTION
+
+This script reads all Intune managed devices via Microsoft Graph,
+identifies Windows hardware models, and optionally creates Intune
+Assignment Filters for each detected model.
+
+The script uses Microsoft Graph REST APIs (Invoke-MgGraphRequest)
+instead of Get-MgDeviceManagementManagedDevice to avoid Graph SDK
+module/version issues commonly encountered in admin workstations.
+
+The script supports two operating modes:
+
+OPTION 1
+---------
+Inventory Mode
+
+Displays all discovered Windows hardware models and their device counts.
+
+This mode:
+
+- Does NOT create or modify anything
+- Does NOT exclude any device models
+- Exports a complete hardware inventory report
+
+Output:
+- IntuneModels.csv
+
+Use this mode to:
+- Review hardware inventory
+- Estimate assignment filter requirements
+- Identify unsupported hardware
+- Verify expected model names
+
+OPTION 2
+---------
+Create / Update Filters
+
+Creates missing Intune Assignment Filters for physical Windows devices.
+
+This mode:
+
+- Reads existing assignment filters
+- Excludes known VM / lab platforms
+- Compares existing filters
+- Creates only missing filters
+- Never duplicates existing filters
+
+Before creating filters the script displays:
+
+- Existing filters
+- Filters that would be created
+- Excluded models
+- Device counts
+- Targeted device counts
+
+A double confirmation step prevents accidental creation.
+
+OUTPUT FILES
+
+IntuneModels.csv
+----------------
+Complete inventory of all Windows device models.
+
+Example:
+
+DeviceCount,Model
+125,HP EliteBook 840 G11
+88,HP EliteBook 860 G11
+44,Latitude 7450
+
+IntuneFilterPreview.csv
+-----------------------
+Preview of all Intune Assignment Filters.
+
+Example:
+
+DeviceCount,Model,FilterName,Exists
+125,HP EliteBook 840 G11,MODEL_HP_EliteBook_840_G11,True
+88,HP EliteBook 860 G11,MODEL_HP_EliteBook_860_G11,False
+
+ExcludedModels.csv
+------------------
+Models intentionally excluded from filter creation.
+
+Example:
+
+DeviceCount,Model
+120,VMware7,1
+43,Virtual Machine
+
+FILTER NAMING
+
+Generated filter names follow:
+
+MODEL_<ModelName>
+
+Examples:
+
+MODEL_HP_EliteBook_840_G11
+MODEL_HP_EliteBook_860_G11
+MODEL_Latitude_7450
+
+FILTER RULES
+
+Generated rule example:
+
+(device.model -eq "HP EliteBook 840 G11")
+
+This allows targeting policies, applications,
+and driver deployments to specific hardware models.
+
+EXCLUDED MODELS
+
+By default the script excludes:
+
+- Virtual Machine
+- VMware7,1
+- VMware20,1
+- VMware Virtual Platform
+- VirtualBox
+- KVM
+- Bochs
+- QEMU
+- Default string
+- System Product Name
+- To be filled by O.E.M.
+
+This prevents assignment filters from being created for
+test, lab, VM, and improperly inventoried devices.
+
+REQUIRED GRAPH PERMISSIONS
+
+DeviceManagementManagedDevices.Read.All
+
+Required for:
+- Reading managed devices
+- Reading hardware model information
+
+DeviceManagementConfiguration.ReadWrite.All
+
+Required for:
+- Reading assignment filters
+- Creating assignment filters
+
+REQUIRED MODULE
+
+Microsoft.Graph
+
+Example:
+
+Install-Module Microsoft.Graph -Scope CurrentUser
+
+CONNECT TO GRAPH
+
+Connect-MgGraph -Scopes `
+    "DeviceManagementManagedDevices.Read.All", `
+    "DeviceManagementConfiguration.ReadWrite.All"
+
+EXAMPLE USAGE
+
+Inventory Mode
+--------------
+
+.\Intune-ModelFilters.ps1
+
+Select:
+
+1
+
+Result:
+
+- Display all device models
+- Export IntuneModels.csv
+
+Create Filters
+--------------
+
+.\Intune-ModelFilters.ps1
+
+Select:
+
+2
+
+Review:
+
+- Excluded models
+- Existing filters
+- Filters to create
+
+Confirm:
+
+Y
+
+Then:
+
+CREATE
+
+Result:
+
+- Missing assignment filters created
+- CSV exports generated
+
+USE CASES
+
+Recommended for:
+
+- Intune Driver Management
+- Driver Automation Tool environments
+- Win32 App targeting
+- BIOS update targeting
+- Vendor-specific configurations
+- Hardware-specific compliance policies
+
+EXAMPLE ASSIGNMENT
+
+Group:
+All Devices
+
+Filter:
+MODEL_HP_EliteBook_840_G11
+
+Mode:
+Include
+
+Result:
+Only HP EliteBook 840 G11 devices receive the assignment.
+
+NOTES
+
+- Existing filters are not modified
+- Existing filters are not deleted
+- Only missing filters are created
+- Device inventory is obtained directly from Intune
+- Safe to run repeatedly
+- Re-running the script is idempotent
+
+AUTHOR
+
+Andreas Wiesinger / CANCOM
+
+VERSION
+
+1.0
+#>
+
 Connect-MgGraph -Scopes `
     "DeviceManagementManagedDevices.Read.All", `
     "DeviceManagementConfiguration.ReadWrite.All"
